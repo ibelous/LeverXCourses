@@ -1,74 +1,77 @@
-from collections import defaultdict
+import json
 
 
-def solution(students, rooms):
-    rws = defaultdict(list)
-    for room in rooms:
-        rws[room.get('name')[6:]].append(' ')
-    for stud in students:
-        rws[str(stud.get('room'))].append(stud.get('name'))
-    return rws
+class Student:
+    def __init__(self, data: dict):
+        self.id = data.get('id')
+        self.name = data.get('name')
+        self.room = data.get('room')
+
+    def __str__(self):
+        return 'id: {}, name: {}, room: {}'.format(self.id, self.name, self.room)
+
+    def __repr__(self):
+        return 'id: {}, name: {}, room: {}'.format(self.id, self.name, self.room)
+
+
+class Room:
+    def __init__(self, data: dict):
+        self.id = data.get('id')
+        self.name = data.get('name')
+        self.number = int(self.name[6:])
+
+    def __str__(self):
+        return 'id: {}, name: {}, number: {}'.format(self.id, self.name, self.number)
+
+
+class RoomWithStudents(Room):
+    def __init__(self, data: dict):
+        super().__init__(data=data)
+        self.students = []
+
+    def __str__(self):
+        return 'id: {}, name: {}, number: {}, students: {}'.format(self.id, self.name, self.number,
+                                                                   self.students)
+
+
+class SolutionHandler:
+    def __init__(self):
+        self.rooms_with_students = []
+
+    def solution(self, rooms: list, students: list):
+        roomsdict = {}
+        for room in rooms:
+            roomsdict[room.number] = room
+        for stud in students:
+            if roomsdict.get(stud.room):
+                roomsdict[stud.room].students.append(stud)
+            else:
+                print('No such room')
+
+
+class RoomWithStudentsEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, RoomWithStudents):
+            return o.__dict__
+        return json.JSONEncoder.default(self, o)
 
 
 def main():
-    students = [
-        {
-            'id': 1,
-            'name': 'Nikita #1',
-            'room': 1
-        },
-        {
-            'id': 2,
-            'name': 'Nikita #2',
-            'room': 1
-        },
-        {
-            'id': 3,
-            'name': 'Nikita #3',
-            'room': 2
-        },
-        {
-            'id': 4,
-            'name': 'Nikita #4',
-            'room': 2
-        },
-        {
-            'id': 5,
-            'name': 'Nikita #5',
-            'room': 2
-        },
-        {
-            'id': 6,
-            'name': 'Nikita #6',
-            'room': 2
-        },
-        {
-            'id': 7,
-            'name': 'Nikita #7',
-            'room': 3
-        }
-    ]
+    students, rooms = [], []
+    with open('students.json', 'r') as sfile:
+        for stud in json.load(sfile):
+            students.append(Student(stud))
+    with open('rooms.json', 'r') as rfile:
+        for room in json.load(rfile):
+            rooms.append(RoomWithStudents(room))
 
-    rooms = [
-        {
-            'id': 1,
-            'name': 'Room #1',
-            'students': []
-        },
-        {
-            'id': 2,
-            'name': 'Room #2',
-            'students': []
-        },
-        {
-            'id': 42,
-            'name': 'Room #3',
-            'students': []
-        }
-    ]
-
-    rooms_w_students = solution(students, rooms)
-    print('result=%s', rooms_w_students)
+    solution = SolutionHandler()
+    solution.solution(rooms, students)
+    print(rooms[0].students[0].__str__())
+    for room in rooms:
+        print(room)
+    #with open('output.json', 'w') as f:
+     #   json.dump(rooms, f, cls=RoomWithStudentsEncoder)
 
 
 if __name__ == "__main__":
