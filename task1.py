@@ -70,8 +70,6 @@ def main():
     solution = SolutionHandler()
     solution.solution(rooms, students)
     print(rooms[0].students[0].__str__())
-    for room in rooms:
-        print(room)
     with open('output.json', 'w') as f:
         json.dump(rooms, f, cls=RoomWithStudentsEncoder, sort_keys=True, indent=4)
 
