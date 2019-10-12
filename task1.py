@@ -53,6 +53,8 @@ class RoomWithStudentsEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, RoomWithStudents):
             return o.__dict__
+        if isinstance(o, Student):
+            return o.__dict__
         return json.JSONEncoder.default(self, o)
 
 
@@ -70,8 +72,8 @@ def main():
     print(rooms[0].students[0].__str__())
     for room in rooms:
         print(room)
-    #with open('output.json', 'w') as f:
-     #   json.dump(rooms, f, cls=RoomWithStudentsEncoder)
+    with open('output.json', 'w') as f:
+        json.dump(rooms, f, cls=RoomWithStudentsEncoder, sort_keys=True, indent=4)
 
 
 if __name__ == "__main__":
