@@ -1,4 +1,5 @@
 import json
+import xml.etree.ElementTree as ET
 
 
 class Student:
@@ -33,6 +34,10 @@ class RoomWithStudents(Room):
         return 'id: {}, name: {}, number: {}, students: {}'.format(self.id, self.name, self.number,
                                                                    self.students)
 
+    def __repr__(self):
+        return 'id: {}, name: {}, number: {}, students: {}'.format(self.id, self.name, self.number,
+                                                                   self.students)
+
 
 class SolutionHandler:
     def __init__(self):
@@ -60,18 +65,39 @@ class RoomWithStudentsEncoder(json.JSONEncoder):
 
 def main():
     students, rooms = [], []
-    with open('students.json', 'r') as sfile:
+    print('Enter path to students.json(Default: ./students.json):')
+    studentspath = input()
+    with open(studentspath or 'students.json', 'r') as sfile:
         for stud in json.load(sfile):
             students.append(Student(stud))
-    with open('rooms.json', 'r') as rfile:
+    print('Enter path to rooms.json(Default: ./rooms.json):')
+    roomspath = input()
+    with open(roomspath or 'rooms.json', 'r') as rfile:
         for room in json.load(rfile):
             rooms.append(RoomWithStudents(room))
+    roomlist = rooms
 
     solution = SolutionHandler()
     solution.solution(rooms, students)
-    print(rooms[0].students[0].__str__())
-    with open('output.json', 'w') as f:
-        json.dump(rooms, f, cls=RoomWithStudentsEncoder, sort_keys=True, indent=4)
+    print('Choose output method(default-JSON):\n1. JSON\n2.XML')
+    if input() == '2':
+        '''rooms = ET.Element('rooms')
+        room = ET.SubElement(rooms, 'room')
+        roomid = ET.SubElement(room, 'roomid')
+        roomname = ET.SubElement(room, 'roomname')
+        roomnumber = ET.SubElement(room, 'roomnumber')
+        roomstudents = ET.SubElement(room, 'roomstudents')
+        studentid = ET.SubElement(roomstudents, 'studentid')
+        studentname = ET.SubElement(roomstudents, 'studentname')
+        rooms.set('rooms', roomlist)
+        mydata = ET.XML(ET.tostring(rooms))
+        print(mydata)
+        with open('output.xml', 'w') as f:
+            f.write(str(ET.tostring(mydata)))'''
+        pass
+    else:
+        with open('output.json', 'w') as f:
+            json.dump(rooms, f, cls=RoomWithStudentsEncoder, sort_keys=True, indent=4)
 
 
 if __name__ == "__main__":
