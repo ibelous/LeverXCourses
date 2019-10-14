@@ -1,5 +1,6 @@
 import json
 import xml.etree.ElementTree as ET
+import argparse
 
 
 class Student:
@@ -65,23 +66,23 @@ class RoomWithStudentsEncoder(json.JSONEncoder):
 
 def main():
     students, rooms = [], []
-    print('Enter path to students.json(Default: ./students.json):')
-    studentspath = input()
-    with open(studentspath or 'students.json', 'r') as sfile:
+    parser = argparse.ArgumentParser(description='list merger')
+    parser.add_argument('studentspath', type=str, help='Enter path to students.json(Default: ./students.json):')
+    parser.add_argument('roomspath', type=str, help='Enter path to rooms.json(Default: ./rooms.json):')
+    parser.add_argument('jsonXML', type=str, help='Choose output method(default-JSON):\n1. JSON\n2.XML')
+    args = parser.parse_args()
+    with open(args.studentspath or 'students.json', 'r') as sfile:
         for stud in json.load(sfile):
             students.append(Student(stud))
-    print('Enter path to rooms.json(Default: ./rooms.json):')
-    roomspath = input()
-    with open(roomspath or 'rooms.json', 'r') as rfile:
+    with open(args.roomspath or 'rooms.json', 'r') as rfile:
         for room in json.load(rfile):
             rooms.append(RoomWithStudents(room))
     roomlist = rooms
 
     solution = SolutionHandler()
     solution.solution(rooms, students)
-    print('Choose output method(default-JSON):\n1. JSON\n2.XML')
-    if input() == '2':
-        '''rooms = ET.Element('rooms')
+    if args.jsonXML == '2':
+        rooms = ET.Element('rooms')
         room = ET.SubElement(rooms, 'room')
         roomid = ET.SubElement(room, 'roomid')
         roomname = ET.SubElement(room, 'roomname')
@@ -89,11 +90,11 @@ def main():
         roomstudents = ET.SubElement(room, 'roomstudents')
         studentid = ET.SubElement(roomstudents, 'studentid')
         studentname = ET.SubElement(roomstudents, 'studentname')
-        rooms.set('rooms', roomlist)
-        mydata = ET.XML(ET.tostring(rooms))
+        mydata = ET.ElementTree(rooms)
         print(mydata)
         with open('output.xml', 'w') as f:
-            f.write(str(ET.tostring(mydata)))'''
+            mydata.write(f)
+            #f.write(str(ET.tostring(mydata)))
         pass
     else:
         with open('output.json', 'w') as f:
