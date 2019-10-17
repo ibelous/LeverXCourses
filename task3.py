@@ -16,7 +16,7 @@ def main():
     with ThreadPoolExecutor(max_workers=5) as executor:
         for i in range(5):
             threads.append(executor.submit(function(1000000, lock, )))
-    print("----------------------", a)  # ???
+    print("a = {}".format(a))
 
 
 main()
