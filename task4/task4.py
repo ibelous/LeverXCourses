@@ -16,11 +16,11 @@ class Student:
         self.sex = data.get('sex')
 
     def __str__(self):
-        return 'id: {}, name: {}, birthday: {}, sex: {} room: {}'.\
+        return 'id: {}, name: {}, birthday: {}, sex: {}, room: {}'.\
             format(self.id, self.name, self.birthday, self.sex, self.room)
 
     def __repr__(self):
-        return '\nid: {}, name: {}, birthday: {}, sex: {} room: {}'. \
+        return '\nid: {}, name: {}, birthday: {}, sex: {}, room: {}'. \
             format(self.id, self.name, self.birthday, self.sex, self.room)
 
 
@@ -143,7 +143,6 @@ class DbConfig:
 
         parser.read(filename)
         db = {}
-        print(parser.sections())
         if parser.has_section(section):
             items = parser.items(section)
             for item in items:
@@ -183,8 +182,32 @@ class DbWorker:
         for room in rooms:
             self.cursor.execute('insert into rooms (RoomID, RoomName, RoomNumber) values (%s, %s, %s)',
                                 (room.id, room.name, room.number))
+        self.conn.commit()
 
-    # def get_
+    def get_all_students(self):
+        query = 'select r.*, s.* from rooms r, students s where r.RoomNumber = s.StudentRoomNumber ;'
+        self.cursor.execute(query)
+        records = self.cursor.fetchall()
+        rooms_w_students = []
+        rooms_dict = {}
+        for row in records:
+            if not rooms_dict.get(row[2]):
+                rooms_dict[row[2]] = RoomWithStudents({'id': row[0], 'name': row[1]})
+            rooms_dict[row[4]].students.append(Student(
+                    {'id': row[3], 'room': row[4], 'name': row[5], 'birthday': str(row[6]), 'sex': row[7]}))
+
+        return list(rooms_dict.values())
+
+    def get_students_count(self):
+        query = 'select r.RoomName, count(students.StudentID) as total from rooms r left join ' \
+                'students on r.RoomNumber = students.StudentRoomNumber group by r.RoomName'
+        self.cursor.execute(query)
+        records = self.cursor.fetchall()
+        result = []
+        for row in records:
+            result.append({'RoomName': row[0], 'StudentsCount': row[1]})
+        return result
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.conn.close()
         print('Connection closed.')
@@ -202,12 +225,16 @@ def main():
     rooms = ReadRooms(args.roomspath).readFile()
     conn = DbWorker()
     with conn:
-        conn.insert_rooms(rooms)
-        conn.insert_students(students)
+        # conn.insert_rooms(rooms)
+        # conn.insert_students(students)
+        # stud_count = conn.get_students_count()
+        # for rec in stud_count:
+        #     print(rec)
+        rooms_w_s = conn.get_all_students()
 
     solution = SolutionHandler()
     roomswithsudents = solution.listsunion(rooms, students)
-    solution.writefile(args.outputformat, roomswithsudents)
+    solution.writefile(args.outputformat, rooms_w_s)
 
 
 if __name__ == "__main__":
