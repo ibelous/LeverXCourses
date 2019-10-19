@@ -1,10 +1,9 @@
 import json
 import xml.etree.cElementTree as ET
 import argparse
-import mysql.connector
+import datetime
 from mysql.connector import MySQLConnection, Error
 from configparser import ConfigParser
-import os
 
 
 class Student:
@@ -137,6 +136,12 @@ class ReadRooms(JSONFileReader):
         return rooms
 
 
+class JsonSelectsWriter:
+    def writefile(self, filename: str, data: list):
+        with open(filename, 'w') as f:
+            json.dump(data, f, sort_keys=True, indent=4)
+
+
 class DbConfig:
     def read_db_config(self, filename='config.ini', section='mysql'):
         parser = ConfigParser()
@@ -154,9 +159,11 @@ class DbConfig:
 
 
 class DbWorker:
+    def __init__(self, configpath):
+        self.configpath = configpath
     def __enter__(self):
 
-        self.db_config = DbConfig().read_db_config()
+        self.db_config = DbConfig().read_db_config(filename=self.configpath)
 
         try:
             print('Connecting to MySQL database...')
@@ -208,33 +215,98 @@ class DbWorker:
             result.append({'RoomName': row[0], 'StudentsCount': row[1]})
         return result
 
+    def get_top5_avg_age(self):
+        query = 'select rooms.RoomName, from_unixtime(avg(unix_timestamp(students.StudentBirthday)))' \
+                ' as total from rooms' \
+                ' left join students on rooms.RoomNumber=students.StudentRoomNumber group by rooms.RoomName ' \
+                'order by -avg(students.StudentBirthday) limit 6' \
+
+        self.cursor.execute(query)
+        records = self.cursor.fetchall()
+        result = []
+        records = records[1:]
+        for row in records:
+            result.append({'RoomName': row[0], 'Average age': (datetime.datetime.today() - row[1]).days/365.25})
+        return result
+
+    def get_top5_max_diff_in_age(self):
+        query = 'select rooms.RoomName, ' \
+                'datediff(max(students.StudentBirthday), ' \
+                'min(students.StudentBirthday)) as total ' \
+                'from rooms left join students on rooms.RoomNumber=students.StudentRoomNumber ' \
+                'group by rooms.RoomName ' \
+                'order by datediff(min(students.StudentBirthday),' \
+                ' max(students.StudentBirthday)) limit 6;'
+        self.cursor.execute(query)
+        records = self.cursor.fetchall()
+        result = []
+        records = records[1:]
+        for row in records:
+            result.append({'RoomName': row[0], 'Diff in age': row[1]/365.25})
+        return result
+
+    def get_rooms_with_diff_sex(self):
+        query = 'select rooms.RoomName from ' \
+                '(select rooms.RoomName, rooms.RoomNumber from ' \
+                'rooms left join students on rooms.RoomNumber=students.StudentRoomNumber' \
+                ' where students.StudentSEX = \'M\'' \
+                ' group by rooms.RoomName) rooms left join students on rooms.RoomNumber=students.StudentRoomNumber' \
+                ' where students.StudentSEX = \'F\' group by rooms.RoomName;'
+        self.cursor.execute(query)
+        records = self.cursor.fetchall()
+        result = []
+        records = records[1:]
+        for row in records:
+            result.append({'RoomName': row[0]})
+        return result
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.conn.close()
         print('Connection closed.')
 
 
+class IndexWorker:
+    def __init__(self, connector: MySQLConnection):
+        self.conn = connector
+        self.cursor = connector.cursor()
+
+    def birth_index(self):
+        query = 'CREATE INDEX age on students(StudentBirthday)'
+        self.cursor.execute(query)
+        self.conn.commit()
+
+    def room_index(self):
+        query = 'CREATE INDEX room_number on students(StudentRoomNumber)'
+        self.cursor.execute(query)
+        self.conn.commit()
+
+
 def main():
 
     parser = argparse.ArgumentParser(description='list merger')
+    parser.add_argument('configpath', type=str, help='Enter path to config.ini:')
     parser.add_argument('studentspath', type=str, help='Enter path to students.json:')
     parser.add_argument('roomspath', type=str, help='Enter path to rooms.json:')
     parser.add_argument('outputformat', type=str, choices=['json', 'xml'],
                         help='Choose output method:\n1. JSON\n2.XML')
     args = parser.parse_args()
+    config = args.configpath
     students = ReadStudents(args.studentspath).readFile()
     rooms = ReadRooms(args.roomspath).readFile()
-    conn = DbWorker()
-    with conn:
-        # conn.insert_rooms(rooms)
-        # conn.insert_students(students)
-        # stud_count = conn.get_students_count()
-        # for rec in stud_count:
-        #     print(rec)
-        rooms_w_s = conn.get_all_students()
-
+    conn = DbWorker(config)
+    writer = JsonSelectsWriter()
     solution = SolutionHandler()
-    roomswithsudents = solution.listsunion(rooms, students)
-    solution.writefile(args.outputformat, rooms_w_s)
+    with conn:
+        indexer = IndexWorker(conn.conn)
+        conn.insert_rooms(rooms)
+        conn.insert_students(students)
+        indexer.birth_index()
+        indexer.room_index()
+        writer.writefile('stud_count.json', conn.get_students_count())
+        solution.writefile(args.outputformat, conn.get_all_students())
+        writer.writefile('top5_avg_age.json', conn.get_top5_avg_age())
+        writer.writefile('top5_max_age_diff.json', conn.get_top5_max_diff_in_age())
+        writer.writefile('rooms_with_diff_sex.json', conn.get_rooms_with_diff_sex())
 
 
 if __name__ == "__main__":
