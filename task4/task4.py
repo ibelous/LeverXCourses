@@ -47,67 +47,9 @@ class RoomWithStudents(Room):
                                                                    self.students)
 
 
-class SolutionHandler:
-    def __init__(self):
-        self.rooms_with_students = []
-
-    def listsunion(self, rooms: list, students: list):
-        rooms = rooms.copy()
-        roomsdict = {}
-        for room in rooms:
-            roomsdict[room.number] = room
-        for stud in students:
-            if roomsdict.get(stud.room):
-                roomsdict[stud.room].students.append(stud)
-            else:
-                print('No such room')
-        return rooms
-
-    def writefile(self, outputformat: str, rooms):
-        if outputformat == 'json':
-            JsonWriter().write(rooms=rooms)
-        elif outputformat == 'xml':
-            XmlWriter().write(rooms=rooms)
-
-
 class BaseWriter:
-    def write(self, rooms: list):
+    def writefile(self, filename:str, data: list):
         return NotImplementedError
-
-
-class JsonWriter(BaseWriter):
-    def write(self, rooms: list):
-        with open('output.json', 'w') as f:
-            json.dump(rooms, f, cls=RoomWithStudentsEncoder, sort_keys=True, indent=4)
-
-
-class XmlWriter(BaseWriter):
-    def write(self, rooms: list):
-        roomswithstudents = rooms
-        rooms = ET.Element('rooms')
-        for rm in roomswithstudents:
-            room = ET.SubElement(rooms, 'room')
-            roomid = ET.SubElement(room, 'roomid')
-            roomname = ET.SubElement(room, 'roomname')
-            roomnumber = ET.SubElement(room, 'roomnumber')
-            roomstudents = ET.SubElement(room, 'roomstudents')
-            roomid.text = str(rm.id)
-            roomname.text = str(rm.name)
-            roomnumber.text = str(rm.number)
-            roomstudents.text = str(rm.students)
-
-        mydata = ET.ElementTree(rooms)
-        ET.dump(mydata)
-        mydata.write('output.xml', xml_declaration=True)
-
-
-class RoomWithStudentsEncoder(json.JSONEncoder):
-    def default(self, o):
-        if isinstance(o, RoomWithStudents):
-            return o.__dict__
-        if isinstance(o, Student):
-            return o.__dict__
-        return json.JSONEncoder.default(self, o)
 
 
 class JSONFileReader:
@@ -136,10 +78,24 @@ class ReadRooms(JSONFileReader):
         return rooms
 
 
-class JsonSelectsWriter:
+class JsonSelectsWriter(BaseWriter):
     def writefile(self, filename: str, data: list):
-        with open(filename, 'w') as f:
+        with open(filename+'.json', 'w') as f:
             json.dump(data, f, sort_keys=True, indent=4)
+
+
+class XmlSelectsWriter(BaseWriter):
+    def writefile(self, filename: str, data: list):
+        roomswithstudents = data
+        rooms = ET.Element('rooms')
+        for rm in roomswithstudents:
+            room = ET.SubElement(rooms, 'room')
+            roomname = ET.SubElement(room, 'roomname')
+            roomname.text = str(rm.name)
+
+        mydata = ET.ElementTree(rooms)
+        ET.dump(mydata)
+        mydata.write(filename+'.xml', xml_declaration=True)
 
 
 class DbConfig:
@@ -158,9 +114,51 @@ class DbConfig:
         return db
 
 
+class Writer:
+    def __init__(self):
+        self.formats = {'json': JsonSelectsWriter(),
+                        'xml': XmlSelectsWriter()}
+
+    def choose_format(self, outputformat):
+        if outputformat in self.formats:
+            return self.formats.get(outputformat)
+        else:
+            raise ValueError
+
+
 class DbWorker:
     def __init__(self, configpath):
         self.configpath = configpath
+        self.queriesdict = {
+            'get_all_students': 'SELECT r.* , s.StudentID  id, s.StudentName  name, s.StudentSex  sex'
+                                ' FROM rooms r, students s WHERE r.RoomNumber = s.StudentRoomNumber ;',
+            'get_students_count': """
+                SELECT r.RoomName, COUNT(students.StudentID)
+                AS total FROM rooms r 
+                LEFT JOIN students ON r.RoomNumber = students.StudentRoomNumber 
+                GROUP BY r.RoomName
+                """,
+            'get_top5_avg_age': """
+                SELECT rooms.RoomName
+                AS total FROM rooms
+                LEFT JOIN students ON rooms.RoomNumber=students.StudentRoomNumber GROUP BY rooms.RoomName
+                ORDER BY -AVG(students.StudentBirthday) limit 6
+                """,
+            'get_top5_max_diff_in_age': """
+                SELECT rooms.RoomName
+                FROM rooms LEFT JOIN students ON rooms.RoomNumber=students.StudentRoomNumber 
+                GROUP BY rooms.RoomName 
+                ORDER BY DATEDIFF(MIN(students.StudentBirthday),
+                MAX(students.StudentBirthday)) LIMIT 6;
+                """,
+            'get_rooms_with_diff_sex': """
+                SELECT rooms.RoomName AS total FROM rooms 
+                JOIN students ON rooms.RoomNumber=students.StudentRoomNumber  
+                GROUP BY rooms.RoomName
+                HAVING COUNT(DISTINCT students.StudentSEX)>1;
+                """
+        }
+
     def __enter__(self):
 
         self.db_config = DbConfig().read_db_config(filename=self.configpath)
@@ -191,82 +189,11 @@ class DbWorker:
                                 (room.id, room.name, room.number))
         self.conn.commit()
 
-    def get_all_students(self):
-        query = 'SELECT r.*, s.* FROM rooms r, students s WHERE r.RoomNumber = s.StudentRoomNumber ;'
-        self.cursor.execute(query)
-        records = self.cursor.fetchall()
-        rooms_w_students = []
-        rooms_dict = {}
-        for row in records:
-            if not rooms_dict.get(row[2]):
-                rooms_dict[row[2]] = RoomWithStudents({'id': row[0], 'name': row[1]})
-            rooms_dict[row[4]].students.append(Student(
-                    {'id': row[3], 'room': row[4], 'name': row[5], 'birthday': str(row[6]), 'sex': row[7]}))
-
-        return list(rooms_dict.values())
-
-    def get_students_count(self):
-        query = """
-                SELECT r.RoomName, COUNT(students.StudentID)
-                AS total FROM rooms r 
-                LEFT JOIN students ON r.RoomNumber = students.StudentRoomNumber 
-                GROUP BY r.RoomName
-                """
-        self.cursor.execute(query)
-        records = self.cursor.fetchall()
-        result = []
-        for row in records:
-            result.append({'RoomName': row[0], 'StudentsCount': row[1]})
-        return result
-
-    def get_top5_avg_age(self):
-        query = """
-                SELECT rooms.RoomName, from_unixtime(avg(unix_timestamp(students.StudentBirthday)))
-                AS total FROM rooms
-                LEFT JOIN students ON rooms.RoomNumber=students.StudentRoomNumber GROUP BY rooms.RoomName
-                ORDER BY -AVG(students.StudentBirthday) limit 6
-                """
-
-        self.cursor.execute(query)
-        records = self.cursor.fetchall()
-        result = []
-        records = records[1:]
-        for row in records:
-            result.append({'RoomName': row[0], 'Average age': (datetime.datetime.today() - row[1]).days/365.25})
-        return result
-
-    def get_top5_max_diff_in_age(self):
-        query = """
-                SELECT rooms.RoomName, 
-                DATEDIFF(MAX(students.StudentBirthday), 
-                MIN(students.StudentBirthday)) AS total 
-                FROM rooms LEFT JOIN students ON rooms.RoomNumber=students.StudentRoomNumber 
-                GROUP BY rooms.RoomName 
-                ORDER BY DATEDIFF(MIN(students.StudentBirthday),
-                MAX(students.StudentBirthday)) LIMIT 6;
-                """
-        self.cursor.execute(query)
-        records = self.cursor.fetchall()
-        result = []
-        records = records[1:]
-        for row in records:
-            result.append({'RoomName': row[0], 'Diff in age': row[1]/365.25})
-        return result
-
-    def get_rooms_with_diff_sex(self):
-        query = """
-                SELECT rooms.RoomName AS total FROM rooms 
-                JOIN students ON rooms.RoomNumber=students.StudentRoomNumber  
-                GROUP BY rooms.RoomName
-                HAVING COUNT(DISTINCT students.StudentSEX)>1;
-                """
-        self.cursor.execute(query)
-        records = self.cursor.fetchall()
-        result = []
-        records = records[1:]
-        for row in records:
-            result.append({'RoomName': row[0]})
-        return result
+    def execute_queries(self, outputformat):
+        writer = Writer().choose_format(outputformat)
+        for key in self.queriesdict:
+            self.cursor.execute(self.queriesdict[key])
+            writer.writefile(key, self.cursor.fetchall())
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.conn.close()
@@ -302,19 +229,13 @@ def main():
     students = ReadStudents(args.studentspath).readFile()
     rooms = ReadRooms(args.roomspath).readFile()
     conn = DbWorker(config)
-    writer = JsonSelectsWriter()
-    solution = SolutionHandler()
     with conn:
         indexer = IndexWorker(conn.conn)
         conn.insert_rooms(rooms)
         conn.insert_students(students)
         indexer.birth_index()
         indexer.room_index()
-        writer.writefile('stud_count.json', conn.get_students_count())
-        solution.writefile(args.outputformat, conn.get_all_students())
-        writer.writefile('top5_avg_age.json', conn.get_top5_avg_age())
-        writer.writefile('top5_max_age_diff.json', conn.get_top5_max_diff_in_age())
-        writer.writefile('rooms_with_diff_sex.json', conn.get_rooms_with_diff_sex())
+        conn.execute_queries(args.outputformat)
 
 
 if __name__ == "__main__":
