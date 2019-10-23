@@ -1,7 +1,6 @@
 import json
 import xml.etree.cElementTree as ET
 import argparse
-import datetime
 from mysql.connector import MySQLConnection, Error
 from configparser import ConfigParser
 
@@ -48,7 +47,7 @@ class RoomWithStudents(Room):
 
 
 class BaseWriter:
-    def writefile(self, filename:str, data: list):
+    def writefile(self, filename: str, data: list):
         return NotImplementedError
 
 
@@ -116,12 +115,12 @@ class DbConfig:
 
 class Writer:
     def __init__(self):
-        self.formats = {'json': JsonSelectsWriter(),
-                        'xml': XmlSelectsWriter()}
+        self.formats = {'json': JsonSelectsWriter,
+                        'xml': XmlSelectsWriter}
 
     def choose_format(self, outputformat):
         if outputformat in self.formats:
-            return self.formats.get(outputformat)
+            return self.formats.get(outputformat)()
         else:
             raise ValueError
 
