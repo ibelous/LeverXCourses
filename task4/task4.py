@@ -179,7 +179,7 @@ class DbWorker:
 
     def insert_students(self, students: list):
         for stud in students:
-            self.cursor.execute('insert into students (StudentID, RoomNumber, '
+            self.cursor.execute('INSERT INTO students (StudentID, RoomNumber, '
                                 'StudentName, StudentBirthday, StudentSEX) '
                                 'VALUES  (%s, %s, %s, %s, %s)',
                                 (stud.id, stud.room, stud.name, stud.birthday, stud.sex))
@@ -187,12 +187,12 @@ class DbWorker:
 
     def insert_rooms(self, rooms: list):
         for room in rooms:
-            self.cursor.execute('insert into rooms (RoomID, RoomName, RoomNumber) values (%s, %s, %s)',
+            self.cursor.execute('INSERT INTO rooms (RoomID, RoomName, RoomNumber) VALUES (%s, %s, %s)',
                                 (room.id, room.name, room.number))
         self.conn.commit()
 
     def get_all_students(self):
-        query = 'select r.*, s.* from rooms r, students s where r.RoomNumber = s.StudentRoomNumber ;'
+        query = 'SELECT r.*, s.* FROM rooms r, students s WHERE r.RoomNumber = s.StudentRoomNumber ;'
         self.cursor.execute(query)
         records = self.cursor.fetchall()
         rooms_w_students = []
@@ -206,8 +206,12 @@ class DbWorker:
         return list(rooms_dict.values())
 
     def get_students_count(self):
-        query = 'select r.RoomName, count(students.StudentID) as total from rooms r left join ' \
-                'students on r.RoomNumber = students.StudentRoomNumber group by r.RoomName'
+        query = """
+                SELECT r.RoomName, COUNT(students.StudentID)
+                AS total FROM rooms r 
+                LEFT JOIN students ON r.RoomNumber = students.StudentRoomNumber 
+                GROUP BY r.RoomName
+                """
         self.cursor.execute(query)
         records = self.cursor.fetchall()
         result = []
@@ -216,10 +220,12 @@ class DbWorker:
         return result
 
     def get_top5_avg_age(self):
-        query = 'select rooms.RoomName, from_unixtime(avg(unix_timestamp(students.StudentBirthday)))' \
-                ' as total from rooms' \
-                ' left join students on rooms.RoomNumber=students.StudentRoomNumber group by rooms.RoomName ' \
-                'order by -avg(students.StudentBirthday) limit 6' \
+        query = """
+                SELECT rooms.RoomName, from_unixtime(avg(unix_timestamp(students.StudentBirthday)))
+                AS total FROM rooms
+                LEFT JOIN students ON rooms.RoomNumber=students.StudentRoomNumber GROUP BY rooms.RoomName
+                ORDER BY -AVG(students.StudentBirthday) limit 6
+                """
 
         self.cursor.execute(query)
         records = self.cursor.fetchall()
@@ -230,13 +236,15 @@ class DbWorker:
         return result
 
     def get_top5_max_diff_in_age(self):
-        query = 'select rooms.RoomName, ' \
-                'datediff(max(students.StudentBirthday), ' \
-                'min(students.StudentBirthday)) as total ' \
-                'from rooms left join students on rooms.RoomNumber=students.StudentRoomNumber ' \
-                'group by rooms.RoomName ' \
-                'order by datediff(min(students.StudentBirthday),' \
-                ' max(students.StudentBirthday)) limit 6;'
+        query = """
+                SELECT rooms.RoomName, 
+                DATEDIFF(MAX(students.StudentBirthday), 
+                MIN(students.StudentBirthday)) AS total 
+                FROM rooms LEFT JOIN students ON rooms.RoomNumber=students.StudentRoomNumber 
+                GROUP BY rooms.RoomName 
+                ORDER BY DATEDIFF(MIN(students.StudentBirthday),
+                MAX(students.StudentBirthday)) LIMIT 6;
+                """
         self.cursor.execute(query)
         records = self.cursor.fetchall()
         result = []
@@ -246,12 +254,12 @@ class DbWorker:
         return result
 
     def get_rooms_with_diff_sex(self):
-        query = 'select rooms.RoomName from ' \
-                '(select rooms.RoomName, rooms.RoomNumber from ' \
-                'rooms left join students on rooms.RoomNumber=students.StudentRoomNumber' \
-                ' where students.StudentSEX = \'M\'' \
-                ' group by rooms.RoomName) rooms left join students on rooms.RoomNumber=students.StudentRoomNumber' \
-                ' where students.StudentSEX = \'F\' group by rooms.RoomName;'
+        query = """
+                SELECT rooms.RoomName AS total FROM rooms 
+                JOIN students ON rooms.RoomNumber=students.StudentRoomNumber  
+                GROUP BY rooms.RoomName
+                HAVING COUNT(DISTINCT students.StudentSEX)>1;
+                """
         self.cursor.execute(query)
         records = self.cursor.fetchall()
         result = []
@@ -271,12 +279,12 @@ class IndexWorker:
         self.cursor = connector.cursor()
 
     def birth_index(self):
-        query = 'CREATE INDEX age on students(StudentBirthday)'
+        query = 'CREATE INDEX age ON students(StudentBirthday)'
         self.cursor.execute(query)
         self.conn.commit()
 
     def room_index(self):
-        query = 'CREATE INDEX room_number on students(StudentRoomNumber)'
+        query = 'CREATE INDEX room_number ON students(StudentRoomNumber)'
         self.cursor.execute(query)
         self.conn.commit()
 
